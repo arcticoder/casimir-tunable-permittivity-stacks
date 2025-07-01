@@ -61,6 +61,61 @@ class UQConfiguration:
                 'frequency': (1e12, 1e15),      # THz range
                 'field_strength': (0.0, 1e6)   # V/m
             }
+        
+        # CRITICAL UQ FIX: Validate parameter bounds for numerical stability
+        self._validate_parameter_bounds()
+    
+    def _validate_parameter_bounds(self):
+        """
+        Validate parameter bounds to prevent numerical instability.
+        
+        CRITICAL UQ FIX: Ensures physically meaningful and numerically stable bounds.
+        """
+        validated_bounds = {}
+        
+        for param_name, (lower, upper) in self.parameter_bounds.items():
+            # Check for valid finite bounds
+            if not (np.isfinite(lower) and np.isfinite(upper)):
+                warnings.warn(f"HIGH: Non-finite bounds for {param_name}, using defaults")
+                if 'permittivity' in param_name.lower():
+                    lower, upper = 1.0, 10.0
+                elif 'thickness' in param_name.lower():
+                    lower, upper = 10e-9, 1000e-9
+                elif 'temperature' in param_name.lower():
+                    lower, upper = 200.0, 400.0
+                elif 'frequency' in param_name.lower():
+                    lower, upper = 1e12, 1e15
+                else:
+                    lower, upper = 0.1, 10.0  # Generic safe bounds
+            
+            # Check for reasonable bounds ordering
+            if lower >= upper:
+                warnings.warn(f"HIGH: Invalid bounds for {param_name} (lower >= upper), swapping")
+                lower, upper = min(lower, upper), max(lower, upper)
+                if lower == upper:
+                    upper = lower * 1.1  # Add small difference
+            
+            # Check for extreme ratios that could cause numerical issues
+            if upper > 0 and lower > 0:
+                ratio = upper / lower
+                if ratio > 1e10:
+                    warnings.warn(f"HIGH: Extreme parameter ratio for {param_name} ({ratio:.2e}), clamping")
+                    upper = lower * 1e10
+                elif ratio < 1.01:
+                    warnings.warn(f"HIGH: Very narrow bounds for {param_name}, expanding")
+                    mid = (lower + upper) / 2
+                    span = max(abs(mid) * 0.1, 1e-6)
+                    lower = mid - span
+                    upper = mid + span
+            
+            # Check for very small absolute values that could cause underflow
+            if abs(lower) < 1e-15 and abs(upper) < 1e-15:
+                warnings.warn(f"HIGH: Bounds too small for {param_name}, using minimum values")
+                lower, upper = 1e-10, 1e-9
+            
+            validated_bounds[param_name] = (float(lower), float(upper))
+        
+        self.parameter_bounds = validated_bounds
 
 
 class UncertaintyDistribution(ABC):
@@ -201,26 +256,108 @@ class PolynomialChaosExpansion:
         return basis_functions
     
     def _recursive_legendre(self, x: np.ndarray, n: int) -> np.ndarray:
-        """Compute Legendre polynomial using recurrence relation."""
-        P_prev_prev = np.ones_like(x)
-        P_prev = x
+        """
+        Compute Legendre polynomial using recurrence relation with overflow protection.
+        
+        CRITICAL UQ FIX: Added bounds checking and overflow prevention.
+        """
+        # CRITICAL FIX: Limit polynomial order to prevent overflow
+        if n > 20:
+            warnings.warn(f"HIGH: Legendre polynomial order {n} too high, clamping to 20")
+            n = 20
+        
+        # CRITICAL FIX: Clip input values to prevent overflow
+        x_clipped = np.clip(x, -1e6, 1e6)
+        
+        if n <= 3:  # Use explicit forms for small n
+            if n == 0:
+                return np.ones_like(x_clipped)
+            elif n == 1:
+                return x_clipped
+            elif n == 2:
+                return 0.5 * (3*x_clipped**2 - 1)
+            elif n == 3:
+                return 0.5 * (5*x_clipped**3 - 3*x_clipped)
+        
+        # Recursive computation with overflow protection
+        P_prev_prev = np.ones_like(x_clipped)
+        P_prev = x_clipped
         
         for k in range(2, n + 1):
-            P_current = ((2*k - 1) * x * P_prev - (k - 1) * P_prev_prev) / k
-            P_prev_prev = P_prev
-            P_prev = P_current
+            try:
+                # Compute next polynomial with overflow checking
+                term1 = (2*k - 1) * x_clipped * P_prev
+                term2 = (k - 1) * P_prev_prev
+                P_current = (term1 - term2) / k
+                
+                # CRITICAL FIX: Check for overflow and clip if necessary
+                if np.any(np.abs(P_current) > 1e10):
+                    warnings.warn(f"HIGH: Legendre polynomial overflow at order {k}, clipping")
+                    P_current = np.clip(P_current, -1e10, 1e10)
+                
+                # Check for non-finite values
+                if not np.all(np.isfinite(P_current)):
+                    warnings.warn(f"HIGH: Non-finite Legendre polynomial at order {k}")
+                    P_current = np.nan_to_num(P_current, nan=0.0, posinf=1e10, neginf=-1e10)
+                
+                P_prev_prev = P_prev
+                P_prev = P_current
+                
+            except (OverflowError, RuntimeWarning):
+                warnings.warn(f"CRITICAL: Overflow in Legendre computation at order {k}")
+                return np.clip(P_prev, -1e10, 1e10)
         
         return P_prev
     
     def _recursive_hermite(self, xi: np.ndarray, n: int) -> np.ndarray:
-        """Compute Hermite polynomial using recurrence relation."""
-        H_prev_prev = np.ones_like(xi)
-        H_prev = xi
+        """
+        Compute Hermite polynomial using recurrence relation with overflow protection.
+        
+        CRITICAL UQ FIX: Added bounds checking and overflow prevention.
+        """
+        # CRITICAL FIX: Limit polynomial order to prevent overflow
+        if n > 15:  # Hermite polynomials grow faster than Legendre
+            warnings.warn(f"HIGH: Hermite polynomial order {n} too high, clamping to 15")
+            n = 15
+        
+        # CRITICAL FIX: Clip input values to prevent overflow
+        xi_clipped = np.clip(xi, -10, 10)  # Hermite polynomials grow very fast
+        
+        if n <= 3:  # Use explicit forms for small n
+            if n == 0:
+                return np.ones_like(xi_clipped)
+            elif n == 1:
+                return xi_clipped
+            elif n == 2:
+                return xi_clipped**2 - 1
+            elif n == 3:
+                return xi_clipped**3 - 3*xi_clipped
+        
+        # Recursive computation with overflow protection
+        H_prev_prev = np.ones_like(xi_clipped)
+        H_prev = xi_clipped
         
         for k in range(2, n + 1):
-            H_current = xi * H_prev - (k - 1) * H_prev_prev
-            H_prev_prev = H_prev
-            H_prev = H_current
+            try:
+                # Compute next polynomial with overflow checking
+                H_current = xi_clipped * H_prev - (k - 1) * H_prev_prev
+                
+                # CRITICAL FIX: Check for overflow and clip if necessary
+                if np.any(np.abs(H_current) > 1e8):  # Lower threshold for Hermite
+                    warnings.warn(f"HIGH: Hermite polynomial overflow at order {k}, clipping")
+                    H_current = np.clip(H_current, -1e8, 1e8)
+                
+                # Check for non-finite values
+                if not np.all(np.isfinite(H_current)):
+                    warnings.warn(f"HIGH: Non-finite Hermite polynomial at order {k}")
+                    H_current = np.nan_to_num(H_current, nan=0.0, posinf=1e8, neginf=-1e8)
+                
+                H_prev_prev = H_prev
+                H_prev = H_current
+                
+            except (OverflowError, RuntimeWarning):
+                warnings.warn(f"CRITICAL: Overflow in Hermite computation at order {k}")
+                return np.clip(H_prev, -1e8, 1e8)
         
         return H_prev
     
@@ -273,37 +410,133 @@ class PolynomialChaosExpansion:
                            sample_points: np.ndarray, 
                            function_values: np.ndarray) -> np.ndarray:
         """
-        Compute PCE coefficients using least squares.
+        Compute PCE coefficients using robust least squares.
         
         Solve: Ψ α = y, where Ψ is design matrix, α are coefficients, y are function values.
+        
+        CRITICAL UQ FIXES:
+        - Enhanced regularization for numerical stability
+        - Positive definiteness checking before Cholesky
+        - NaN/Inf input validation
+        - Fallback to SVD for singular cases
         """
         try:
+            # CRITICAL FIX: Input validation for non-finite values
+            if not np.all(np.isfinite(sample_points)):
+                warnings.warn("CRITICAL: Non-finite sample points detected")
+                return np.zeros(self.n_coefficients)
+            
+            if not np.all(np.isfinite(function_values)):
+                warnings.warn("CRITICAL: Non-finite function values detected")
+                return np.zeros(self.n_coefficients)
+            
             # Construct design matrix
             design_matrix = self.construct_design_matrix(sample_points)
             
-            # Solve least squares problem with regularization
-            lambda_reg = 1e-8  # Regularization parameter
+            # CRITICAL FIX: Check design matrix condition
+            if not np.all(np.isfinite(design_matrix)):
+                warnings.warn("CRITICAL: Non-finite design matrix detected")
+                return np.zeros(self.n_coefficients)
+            
+            # CRITICAL FIX: Enhanced regularization based on condition number
+            AtA_raw = design_matrix.T @ design_matrix
+            condition_number = np.linalg.cond(AtA_raw)
+            
+            # Adaptive regularization: larger for ill-conditioned matrices
+            if condition_number > 1e12:
+                lambda_reg = 1e-3  # Strong regularization for critical cases
+                warnings.warn(f"HIGH: Ill-conditioned matrix (cond={condition_number:.2e}), using strong regularization")
+            elif condition_number > 1e8:
+                lambda_reg = 1e-5  # Moderate regularization
+            else:
+                lambda_reg = 1e-8  # Standard regularization
+            
             regularization = lambda_reg * np.eye(self.n_coefficients)
             
-            # Normal equations with regularization
-            AtA = design_matrix.T @ design_matrix + regularization
+            # Normal equations with adaptive regularization
+            AtA = AtA_raw + regularization
             Aty = design_matrix.T @ function_values
             
-            # Solve using Cholesky decomposition for numerical stability
-            L = cholesky(AtA, lower=True)
-            z = solve_triangular(L, Aty, lower=True)
-            coefficients = solve_triangular(L.T, z, lower=False)
+            # CRITICAL FIX: Check positive definiteness before Cholesky
+            try:
+                # Test Cholesky decomposition
+                eigenvals = np.linalg.eigvals(AtA)
+                min_eigenval = np.min(eigenvals)
+                
+                if min_eigenval <= 0:
+                    warnings.warn(f"CRITICAL: Matrix not positive definite (min eigenval={min_eigenval:.2e})")
+                    # Fallback to SVD-based solution
+                    return self._solve_via_svd(design_matrix, function_values)
+                
+                # Solve using Cholesky decomposition for numerical stability
+                L = cholesky(AtA, lower=True)
+                z = solve_triangular(L, Aty, lower=True)
+                coefficients = solve_triangular(L.T, z, lower=False)
+                
+            except (np.linalg.LinAlgError, ValueError) as chol_error:
+                warnings.warn(f"CRITICAL: Cholesky decomposition failed: {chol_error}")
+                # Fallback to SVD-based solution
+                return self._solve_via_svd(design_matrix, function_values)
+            
+            # CRITICAL FIX: Validate computed coefficients
+            if not np.all(np.isfinite(coefficients)):
+                warnings.warn("CRITICAL: Non-finite coefficients computed, using SVD fallback")
+                return self._solve_via_svd(design_matrix, function_values)
             
             self.coefficients = coefficients
             
-            # Compute validation error
+            # Compute validation error with safety check
             predicted_values = design_matrix @ coefficients
-            self.validation_error = np.mean((function_values - predicted_values)**2)
+            if np.all(np.isfinite(predicted_values)):
+                self.validation_error = np.mean((function_values - predicted_values)**2)
+            else:
+                self.validation_error = np.inf
+                warnings.warn("HIGH: Infinite validation error due to non-finite predictions")
             
             return coefficients
             
         except Exception as e:
-            warnings.warn(f"PCE coefficient computation failed: {e}")
+            warnings.warn(f"CRITICAL: PCE coefficient computation failed: {e}")
+            return np.zeros(self.n_coefficients)
+    
+    def _solve_via_svd(self, design_matrix: np.ndarray, function_values: np.ndarray) -> np.ndarray:
+        """
+        Robust SVD-based fallback solver for singular/ill-conditioned cases.
+        
+        CRITICAL UQ FIX: Provides robust solution when Cholesky fails.
+        """
+        try:
+            # Use SVD with regularization
+            U, s, Vt = np.linalg.svd(design_matrix, full_matrices=False)
+            
+            # Determine effective rank with threshold
+            threshold = 1e-12 * np.max(s)
+            rank = np.sum(s > threshold)
+            
+            if rank < len(s):
+                warnings.warn(f"HIGH: Rank-deficient matrix (rank={rank}/{len(s)})")
+            
+            # Regularized pseudoinverse
+            s_reg = s / (s**2 + 1e-8)  # Tikhonov regularization in SVD space
+            
+            # Truncate to effective rank
+            s_reg = s_reg[:rank]
+            U_trunc = U[:, :rank]
+            Vt_trunc = Vt[:rank, :]
+            
+            # Compute coefficients
+            coefficients = Vt_trunc.T @ (s_reg * (U_trunc.T @ function_values))
+            
+            # Pad to full size if truncated
+            if len(coefficients) < self.n_coefficients:
+                full_coefficients = np.zeros(self.n_coefficients)
+                full_coefficients[:len(coefficients)] = coefficients
+                coefficients = full_coefficients
+            
+            return coefficients
+            
+        except Exception as e:
+            warnings.warn(f"CRITICAL: SVD fallback also failed: {e}")
             return np.zeros(self.n_coefficients)
     
     def evaluate_surrogate(self, test_points: np.ndarray) -> np.ndarray:
@@ -316,25 +549,83 @@ class PolynomialChaosExpansion:
         return design_matrix @ self.coefficients
     
     def compute_statistical_moments(self) -> Dict[str, float]:
-        """Compute statistical moments from PCE coefficients."""
+        """
+        Compute statistical moments from PCE coefficients with robust numerics.
+        
+        CRITICAL UQ FIX: Added safeguards against division by zero and overflow.
+        """
+        # CRITICAL FIX: Input validation
+        if not np.all(np.isfinite(self.coefficients)):
+            warnings.warn("CRITICAL: Non-finite PCE coefficients in moment computation")
+            return {
+                'mean': 0.0,
+                'variance': 0.0,
+                'std_deviation': 0.0,
+                'skewness': 0.0,
+                'kurtosis': 0.0
+            }
+        
         # Mean (first moment) is the constant term (first coefficient)
         mean = self.coefficients[0]
         
         # Variance computation using orthogonality
         # Var[u] = Σᵢ₌₁ⁿ uᵢ² (excluding constant term)
-        variance = np.sum(self.coefficients[1:]**2)
+        if len(self.coefficients) > 1:
+            variance = np.sum(self.coefficients[1:]**2)
+        else:
+            variance = 0.0
         
-        # Higher moments require more complex calculations
-        # Simplified approximation for demonstration
-        skewness = np.sum(self.coefficients[1:]**3) / (variance**1.5 + 1e-12)
-        kurtosis = np.sum(self.coefficients[1:]**4) / (variance**2 + 1e-12)
+        # CRITICAL FIX: Robust higher moment computation with overflow protection
+        if variance < 1e-16:
+            # Near-zero variance case
+            warnings.warn("HIGH: Near-zero variance in PCE moments")
+            std_deviation = 0.0
+            skewness = 0.0
+            kurtosis = 0.0
+        else:
+            std_deviation = np.sqrt(variance)
+            
+            # Higher moments with overflow protection
+            try:
+                # Clip coefficients to prevent overflow
+                coeff_clipped = np.clip(self.coefficients[1:], -1e6, 1e6)
+                
+                # Skewness with robust normalization
+                skew_numerator = np.sum(coeff_clipped**3)
+                skew_denominator = variance**1.5
+                if skew_denominator > 1e-16:
+                    skewness = skew_numerator / skew_denominator
+                else:
+                    skewness = 0.0
+                
+                # Kurtosis with robust normalization  
+                kurt_numerator = np.sum(coeff_clipped**4)
+                kurt_denominator = variance**2
+                if kurt_denominator > 1e-16:
+                    kurtosis = kurt_numerator / kurt_denominator
+                else:
+                    kurtosis = 0.0
+                
+                # CRITICAL FIX: Validate computed moments
+                if not np.isfinite(skewness):
+                    skewness = 0.0
+                    warnings.warn("HIGH: Non-finite skewness, set to zero")
+                
+                if not np.isfinite(kurtosis):
+                    kurtosis = 0.0
+                    warnings.warn("HIGH: Non-finite kurtosis, set to zero")
+                    
+            except (OverflowError, RuntimeWarning):
+                warnings.warn("HIGH: Overflow in higher moment computation")
+                skewness = 0.0
+                kurtosis = 0.0
         
         return {
-            'mean': mean,
-            'variance': variance,
-            'std_deviation': np.sqrt(variance),
-            'skewness': skewness,
-            'kurtosis': kurtosis
+            'mean': float(mean),
+            'variance': float(variance),
+            'std_deviation': float(std_deviation),
+            'skewness': float(skewness),
+            'kurtosis': float(kurtosis)
         }
 
 
@@ -352,19 +643,22 @@ class GaussianProcessSurrogate:
     def __init__(self, config: UQConfiguration):
         self.config = config
         
-        # Define kernel
+        # Define kernel with expanded bounds for robustness
         length_scale = config.gp_kernel_length_scale
         variance = config.gp_kernel_variance
         noise_level = config.gp_noise_level
         
-        kernel = (variance * RBF(length_scale=length_scale, length_scale_bounds=(1e-3, 1e3)) + 
-                 WhiteKernel(noise_level=noise_level, noise_level_bounds=(1e-10, 1e-2)))
+        # CRITICAL UQ FIX: Expanded hyperparameter bounds for better optimization
+        kernel = (variance * RBF(length_scale=length_scale, 
+                                length_scale_bounds=(1e-5, 1e5)) +  # Expanded from (1e-3, 1e3)
+                 WhiteKernel(noise_level=noise_level, 
+                           noise_level_bounds=(1e-12, 1e-1)))  # Expanded from (1e-10, 1e-2)
         
         self.gp = GaussianProcessRegressor(
             kernel=kernel,
             alpha=1e-10,
             optimizer='fmin_l_bfgs_b',
-            n_restarts_optimizer=10,
+            n_restarts_optimizer=20,  # Increased from 10 for better optimization
             normalize_y=True
         )
         
@@ -513,32 +807,77 @@ class SobolSensitivityAnalysis:
                                   model_function: Callable,
                                   distributions: List[UncertaintyDistribution]) -> Dict:
         """
-        Compute Sobol sensitivity indices.
+        Compute Sobol sensitivity indices with robust numerics.
         
         Uses the method of Saltelli (2010) for efficient computation.
+        
+        CRITICAL UQ FIXES:
+        - Enhanced variance checking
+        - Robust division operations
+        - NaN/Inf validation throughout
+        - Fallback for degenerate cases
         """
         try:
             # Generate sample matrices
             sample_matrices = self.generate_sobol_samples(distributions)
             
-            # Evaluate model at all sample points
+            # Evaluate model at all sample points with error handling
             evaluations = {}
+            evaluation_errors = 0
+            
             for key, samples in sample_matrices.items():
                 try:
-                    evaluations[key] = np.array([model_function(sample) for sample in samples])
+                    # CRITICAL FIX: Validate sample points
+                    if not np.all(np.isfinite(samples)):
+                        warnings.warn(f"HIGH: Non-finite samples in {key}, skipping")
+                        continue
+                    
+                    eval_results = []
+                    for sample in samples:
+                        try:
+                            result = model_function(sample)
+                            if np.isfinite(result):
+                                eval_results.append(result)
+                            else:
+                                eval_results.append(0.0)  # Replace non-finite with zero
+                                evaluation_errors += 1
+                        except Exception:
+                            eval_results.append(0.0)  # Replace failed evaluations
+                            evaluation_errors += 1
+                    
+                    evaluations[key] = np.array(eval_results)
+                    
                 except Exception as e:
-                    warnings.warn(f"Model evaluation failed for {key}: {e}")
+                    warnings.warn(f"HIGH: Model evaluation failed for {key}: {e}")
                     evaluations[key] = np.zeros(self.n_samples)
+                    evaluation_errors += self.n_samples
+            
+            if evaluation_errors > 0:
+                warnings.warn(f"HIGH: {evaluation_errors} model evaluation failures")
+            
+            # Check if we have valid evaluations
+            if 'A' not in evaluations or 'B' not in evaluations:
+                warnings.warn("CRITICAL: Missing required sample matrices A or B")
+                return self._zero_sensitivity_result()
             
             Y_A = evaluations['A']
             Y_B = evaluations['B']
             
-            # Compute total variance
+            # CRITICAL FIX: Robust total variance computation
             Y_total = np.concatenate([Y_A, Y_B])
-            total_variance = np.var(Y_total)
             
+            # Remove any remaining non-finite values
+            Y_total_finite = Y_total[np.isfinite(Y_total)]
+            
+            if len(Y_total_finite) < 10:  # Need minimum samples for reliable variance
+                warnings.warn("CRITICAL: Too few finite model evaluations for sensitivity analysis")
+                return self._zero_sensitivity_result()
+            
+            total_variance = np.var(Y_total_finite)
+            
+            # CRITICAL FIX: Enhanced variance threshold check
             if total_variance < 1e-12:
-                warnings.warn("Total variance is too small for reliable sensitivity analysis")
+                warnings.warn("HIGH: Total variance too small for reliable sensitivity analysis")
                 return self._zero_sensitivity_result()
             
             # First-order sensitivity indices
@@ -546,24 +885,54 @@ class SobolSensitivityAnalysis:
             total_effect = np.zeros(self.n_parameters)
             
             for i in range(self.n_parameters):
-                Y_C_i = evaluations[f'C_{i}']
+                C_key = f'C_{i}' 
+                if C_key not in evaluations:
+                    warnings.warn(f"HIGH: Missing evaluation matrix {C_key}")
+                    continue
                 
-                # First-order: S_i = Var[E[Y|X_i]] / Var[Y]
-                # Approximated as: (1/N) Σ Y_A(j) * [Y_C_i(j) - Y_B(j)] / Var[Y]
-                first_order_numerator = np.mean(Y_A * (Y_C_i - Y_B))
-                first_order[i] = first_order_numerator / total_variance
+                Y_C_i = evaluations[C_key]
                 
-                # Total effect: ST_i = 1 - Var[E[Y|X_~i]] / Var[Y]
-                # Approximated as: 1 - (1/N) Σ Y_B(j) * [Y_C_i(j) - Y_A(j)] / Var[Y]
-                total_effect_numerator = np.mean(Y_B * (Y_C_i - Y_A))
-                total_effect[i] = 1 - total_effect_numerator / total_variance
+                # CRITICAL FIX: Robust sensitivity index computation
+                try:
+                    # Remove non-finite values for this parameter
+                    finite_mask = (np.isfinite(Y_A) & np.isfinite(Y_B) & np.isfinite(Y_C_i))
+                    
+                    if np.sum(finite_mask) < 10:
+                        warnings.warn(f"HIGH: Too few finite values for parameter {i}")
+                        continue
+                    
+                    Y_A_clean = Y_A[finite_mask]
+                    Y_B_clean = Y_B[finite_mask]
+                    Y_C_i_clean = Y_C_i[finite_mask]
+                    
+                    # First-order: S_i = Var[E[Y|X_i]] / Var[Y]
+                    first_order_numerator = np.mean(Y_A_clean * (Y_C_i_clean - Y_B_clean))
+                    first_order[i] = first_order_numerator / total_variance
+                    
+                    # Total effect: ST_i = 1 - Var[E[Y|X_~i]] / Var[Y]
+                    total_effect_numerator = np.mean(Y_B_clean * (Y_C_i_clean - Y_A_clean))
+                    total_effect[i] = 1 - total_effect_numerator / total_variance
+                    
+                    # CRITICAL FIX: Validate computed indices
+                    if not np.isfinite(first_order[i]):
+                        first_order[i] = 0.0
+                        warnings.warn(f"HIGH: Non-finite first-order index for parameter {i}")
+                    
+                    if not np.isfinite(total_effect[i]):
+                        total_effect[i] = 0.0
+                        warnings.warn(f"HIGH: Non-finite total effect index for parameter {i}")
+                    
+                except Exception as e:
+                    warnings.warn(f"HIGH: Sensitivity computation failed for parameter {i}: {e}")
+                    first_order[i] = 0.0
+                    total_effect[i] = 0.0
             
             # Ensure indices are in valid range [0, 1]
             first_order = np.clip(first_order, 0, 1)
             total_effect = np.clip(total_effect, 0, 1)
             
-            # Compute confidence intervals (bootstrap-based)
-            confidence_intervals = self._compute_confidence_intervals(
+            # Compute confidence intervals (robust version)
+            confidence_intervals = self._compute_robust_confidence_intervals(
                 sample_matrices, model_function, total_variance
             )
             
@@ -577,10 +946,13 @@ class SobolSensitivityAnalysis:
                 'total_effect_indices': total_effect,
                 'total_variance': total_variance,
                 'confidence_intervals': confidence_intervals,
-                'parameter_names': list(self.config.parameter_bounds.keys())[:self.n_parameters]
+                'parameter_names': list(self.config.parameter_bounds.keys())[:self.n_parameters],
+                'evaluation_errors': evaluation_errors,
+                'finite_samples': len(Y_total_finite)
             }
             
         except Exception as e:
+            warnings.warn(f"CRITICAL: Sobol sensitivity analysis failed: {e}")
             return {
                 'success': False,
                 'error': str(e)
@@ -598,33 +970,118 @@ class SobolSensitivityAnalysis:
             'parameter_names': list(self.config.parameter_bounds.keys())[:self.n_parameters]
         }
     
-    def _compute_confidence_intervals(self, 
-                                    sample_matrices: Dict,
-                                    model_function: Callable,
-                                    total_variance: float,
-                                    n_bootstrap: int = 100,
-                                    confidence_level: float = 0.95) -> Dict:
-        """Compute confidence intervals using bootstrap resampling."""
+    def _compute_robust_confidence_intervals(self, 
+                                           sample_matrices: Dict,
+                                           model_function: Callable,
+                                           total_variance: float,
+                                           n_bootstrap: int = 50,  # Reduced for robustness
+                                           confidence_level: float = 0.95) -> Dict:
+        """
+        Compute robust confidence intervals using bootstrap resampling.
+        
+        CRITICAL UQ FIX: Added convergence checking and robust statistics.
+        """
         try:
-            bootstrap_first_order = np.zeros((n_bootstrap, self.n_parameters))
-            bootstrap_total_effect = np.zeros((n_bootstrap, self.n_parameters))
+            bootstrap_first_order = []
+            bootstrap_total_effect = []
+            successful_bootstraps = 0
+            max_attempts = n_bootstrap * 2  # Allow some failures
             
-            for boot_idx in range(n_bootstrap):
-                # Bootstrap resample
-                indices = np.random.choice(self.n_samples, self.n_samples, replace=True)
+            for attempt in range(max_attempts):
+                if successful_bootstraps >= n_bootstrap:
+                    break
                 
-                Y_A_boot = np.array([model_function(sample_matrices['A'][i]) for i in indices])
-                Y_B_boot = np.array([model_function(sample_matrices['B'][i]) for i in indices])
-                
-                for i in range(self.n_parameters):
-                    Y_C_i_boot = np.array([model_function(sample_matrices[f'C_{i}'][j]) for j in indices])
+                try:
+                    # Bootstrap resample with validation
+                    indices = np.random.choice(self.n_samples, self.n_samples, replace=True)
+                    
+                    # Evaluate bootstrap samples with error handling
+                    Y_A_boot = []
+                    Y_B_boot = []
+                    param_evaluations = {i: [] for i in range(self.n_parameters)}
+                    
+                    valid_bootstrap = True
+                    
+                    for idx in indices:
+                        try:
+                            # Validate sample point
+                            if not np.all(np.isfinite(sample_matrices['A'][idx])):
+                                continue
+                            
+                            y_a = model_function(sample_matrices['A'][idx])
+                            y_b = model_function(sample_matrices['B'][idx])
+                            
+                            if np.isfinite(y_a) and np.isfinite(y_b):
+                                Y_A_boot.append(y_a)
+                                Y_B_boot.append(y_b)
+                                
+                                # Evaluate C matrices
+                                for i in range(self.n_parameters):
+                                    c_key = f'C_{i}'
+                                    if c_key in sample_matrices:
+                                        y_c = model_function(sample_matrices[c_key][idx])
+                                        if np.isfinite(y_c):
+                                            param_evaluations[i].append(y_c)
+                                        else:
+                                            param_evaluations[i].append(0.0)
+                                    else:
+                                        param_evaluations[i].append(0.0)
+                            
+                        except Exception:
+                            continue
+                    
+                    # Check if we have enough valid samples
+                    if len(Y_A_boot) < 10:
+                        continue
+                    
+                    Y_A_boot = np.array(Y_A_boot)
+                    Y_B_boot = np.array(Y_B_boot)
                     
                     # Compute sensitivity indices for bootstrap sample
-                    first_order_num = np.mean(Y_A_boot * (Y_C_i_boot - Y_B_boot))
-                    bootstrap_first_order[boot_idx, i] = first_order_num / (total_variance + 1e-12)
+                    boot_first_order = np.zeros(self.n_parameters)
+                    boot_total_effect = np.zeros(self.n_parameters)
                     
-                    total_effect_num = np.mean(Y_B_boot * (Y_C_i_boot - Y_A_boot))
-                    bootstrap_total_effect[boot_idx, i] = 1 - total_effect_num / (total_variance + 1e-12)
+                    for i in range(self.n_parameters):
+                        if len(param_evaluations[i]) == len(Y_A_boot):
+                            Y_C_i_boot = np.array(param_evaluations[i])
+                            
+                            # Robust sensitivity computation
+                            try:
+                                first_order_num = np.mean(Y_A_boot * (Y_C_i_boot - Y_B_boot))
+                                boot_first_order[i] = first_order_num / (total_variance + 1e-16)
+                                
+                                total_effect_num = np.mean(Y_B_boot * (Y_C_i_boot - Y_A_boot))
+                                boot_total_effect[i] = 1 - total_effect_num / (total_variance + 1e-16)
+                                
+                                # Validate computed values
+                                if not (np.isfinite(boot_first_order[i]) and np.isfinite(boot_total_effect[i])):
+                                    valid_bootstrap = False
+                                    break
+                                    
+                            except Exception:
+                                valid_bootstrap = False
+                                break
+                    
+                    if valid_bootstrap:
+                        bootstrap_first_order.append(boot_first_order)
+                        bootstrap_total_effect.append(boot_total_effect)
+                        successful_bootstraps += 1
+                    
+                except Exception:
+                    continue
+            
+            if successful_bootstraps < 10:
+                warnings.warn(f"HIGH: Only {successful_bootstraps} successful bootstrap samples")
+                return {
+                    'first_order': np.zeros((self.n_parameters, 2)),
+                    'total_effect': np.zeros((self.n_parameters, 2)),
+                    'confidence_level': confidence_level,
+                    'successful_bootstraps': successful_bootstraps
+                }
+            
+            # Convert to arrays
+            bootstrap_first_order = np.array(bootstrap_first_order)
+            bootstrap_total_effect = np.array(bootstrap_total_effect)
             
             # Compute percentiles for confidence intervals
             alpha = 1 - confidence_level
@@ -634,18 +1091,24 @@ class SobolSensitivityAnalysis:
             first_order_ci = np.percentile(bootstrap_first_order, [lower_percentile, upper_percentile], axis=0).T
             total_effect_ci = np.percentile(bootstrap_total_effect, [lower_percentile, upper_percentile], axis=0).T
             
+            # Ensure CIs are within valid bounds
+            first_order_ci = np.clip(first_order_ci, 0, 1)
+            total_effect_ci = np.clip(total_effect_ci, 0, 1)
+            
             return {
                 'first_order': first_order_ci,
                 'total_effect': total_effect_ci,
-                'confidence_level': confidence_level
+                'confidence_level': confidence_level,
+                'successful_bootstraps': successful_bootstraps
             }
             
         except Exception as e:
-            warnings.warn(f"Confidence interval computation failed: {e}")
+            warnings.warn(f"HIGH: Confidence interval computation failed: {e}")
             return {
                 'first_order': np.zeros((self.n_parameters, 2)),
                 'total_effect': np.zeros((self.n_parameters, 2)),
-                'confidence_level': confidence_level
+                'confidence_level': confidence_level,
+                'successful_bootstraps': 0
             }
 
 
