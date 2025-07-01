@@ -1,0 +1,39 @@
+{
+	"folders": [
+		{
+			"name": "casimir-tunable-permittivity-stacks (main)",
+			"path": "."
+		},
+		{
+			"name": "lqg-anec-framework",
+			"path": "../lqg-anec-framework"
+		},
+		{
+			"name": "negative-energy-generator",
+			"path": "../negative-energy-generator"
+		},
+		{
+			"name": "unified-lqg-qft",
+			"path": "../unified-lqg-qft"
+		}
+	],
+	"settings": {
+		"python.defaultInterpreterPath": "C:\\Program Files\\Python313\\python.exe",
+		"files.exclude": {
+			"**/.git": true,
+			"**/node_modules": true,
+			"**/__pycache__": true,
+			"**/.pytest_cache": true,
+			"**/venv": true,
+			"**/.venv": true
+		},
+		"powershell.cwd": "casimir-tunable-permittivity-stacks (main)"
+	},
+	"extensions": {
+		"recommendations": [
+			"ms-python.python",
+			"ms-vscode.cpptools",
+			"james-yu.latex-workshop"
+		]
+	}
+}
