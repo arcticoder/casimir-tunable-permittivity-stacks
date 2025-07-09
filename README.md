@@ -1,5 +1,13 @@
 # Casimir Tunable Permittivity Stacks - LQG FTL Metric Engineering Support
 
+## Related Repositories
+
+- [energy](https://github.com/arcticoder/energy): Central hub for all energy, quantum, and Casimir research. This tunable permittivity platform is integrated with the energy framework for digital twin, UQ, and FTL metric engineering.
+- [lqg-ftl-metric-engineering](https://github.com/arcticoder/lqg-ftl-metric-engineering): Directly uses tunable permittivity stacks for zero-exotic-energy FTL metric engineering.
+- [casimir-ultra-smooth-fabrication-platform](https://github.com/arcticoder/casimir-ultra-smooth-fabrication-platform): Provides fabrication and quality control for permittivity stack devices.
+
+All repositories are part of the [arcticoder](https://github.com/arcticoder) ecosystem and link back to the energy framework for unified documentation and integration.
+
 ## Overview
 
 Revolutionary tunable permittivity stack platform providing **critical electromagnetic property control** for the LQG FTL Metric Engineering framework. Enables **zero exotic energy FTL technology** through precise permittivity manipulation supporting **24.2 billion× energy enhancement** with advanced metamaterial engineering and quantum vacuum fluctuation control.
