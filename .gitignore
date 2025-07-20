@@ -45,3 +45,5 @@ coverage.xml
 .pytest_cache/
 
 .github/instructions/copilot-instructions.md
+
+.github/
