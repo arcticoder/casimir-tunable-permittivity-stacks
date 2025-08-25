@@ -10,15 +10,15 @@ All repositories are part of the [arcticoder](https://github.com/arcticoder) eco
 
 ## Overview
 
-Research-stage tunable permittivity stack platform providing electromagnetic property control intended to support exploratory studies for the LQG FTL Metric Engineering framework. The project investigates whether permittivity manipulation can reduce exotic-energy requirements in specific theoretical scenarios; reported enhancement factors are model-dependent and include substantial uncertainty (see `docs/technical-documentation.md` and `UQ_CRITICAL_RESOLUTION_REPORT.md`).
+Research-stage tunable permittivity stack platform providing electromagnetic property control for exploratory studies related to LQG FTL metric engineering. The project investigates whether permittivity manipulation may affect model-level exotic-energy estimates in specific theoretical scenarios; reported enhancement factors are model-dependent and include substantial uncertainty (see `docs/technical-documentation.md` and `UQ_CRITICAL_RESOLUTION_REPORT.md`). These results are preliminary and require independent verification and clear provenance before being used for operational claims.
 
 ## LQG FTL Metric Engineering Integration
 
-### Electromagnetic Permittivity Support for FTL
- - **Objective**: Explore whether permittivity control can materially reduce exotic-matter requirements in targeted models.
- - **FTL-compatibility (model-level)**: Certain model configurations in this project produce metrics consistent with FTL-compatible field configurations; these are model outputs and require further verification.
- - **Control Accuracy (observed in lab/prototype)**: Sub-1% tuning accuracy has been demonstrated in controlled experiments; production-grade control requires additional engineering, integration, and safety review.
- - **Cross-Repository Integration**: Integration with `lqg-ftl-metric-engineering` exists for modelling purposes; cross-repository consistency checks and independent validation remain recommended.
+### Electromagnetic Permittivity Support (research-stage)
+- **Objective**: Explore whether permittivity control can influence model-level exotic-matter estimates in targeted simulations.
+- **FTL-compatibility (model-level)**: Some model configurations produce field configurations that are FTL-compatible at the model level; these are simulation outputs and require further verification, error analysis, and independent review before being interpreted as physical feasibility evidence.
+- **Control Accuracy (reported/prototype)**: Sub-1% tuning accuracy has been reported in controlled experiments; scalability and production-grade performance require further engineering, reproducibility checks, and safety review.
+- **Cross-Repository Integration**: The repository integrates with `lqg-ftl-metric-engineering` for modeling workflows; maintainers should provide cross-repository test artifacts and independent validation for any cross-repo claims.
 
 **Development Status**: Research prototype — not production-ready.
 **LQG Integration**: Demonstrated in simulation and integration tests (model-level).
@@ -28,12 +28,12 @@ Research-stage tunable permittivity stack platform providing electromagnetic pro
 
 ## 🎯 System Specifications
 
-### **Permittivity Control Performance**
-- **Tuning Range**: ε_r = 1.5 to 15.0 with continuous control
-- **Tuning Accuracy**: <1% deviation from target permittivity
-- **Response Time**: <100 ms for full-range transitions  
-- **Frequency Range**: 10¹² to 10¹⁵ Hz (THz regime)
-- **Digital Twin Sync**: <10ms latency, >98% state prediction accuracy
+### Permittivity Control Performance (reported / prototype)
+- **Tuning Range (reported)**: ε_r ≈ 1.5 to 15.0 reported in prototype setups; applicable range depends on material stack and test configuration.
+- **Tuning Accuracy (reported)**: <1% deviation reported under controlled conditions; reproducibility and environmental sensitivity should be reviewed in `docs/`.
+- **Response Time (reported)**: <100 ms for full-range transitions in test configurations; performance depends on actuation hardware and measurement method.
+- **Frequency Range (reported)**: THz regime reported for specific demonstrations (10¹²–10¹⁵ Hz).
+- **Digital Twin Sync (reported)**: Prototype demonstrations report low-latency sync; reported metrics depend on network/hardware and model fidelity.
 
 ### **Advanced Mathematical Frameworks**
 ✅ **Tensor State Estimation** - Stress-energy tensor T_μν formulation with advanced Kalman filtering  
@@ -103,13 +103,13 @@ X_EM = [E_x, E_y, E_z, B_x, B_y, B_z, ε_eff, μ_eff]
 X_material = [strain_tensor, stress_tensor, temperature, density]
 ```
 
-### **Uncertainty Quantification with Critical Fixes**
+### Uncertainty Quantification with Critical Fixes (notes)
 
-**Enhanced PCE Implementation**:
-- ✅ **Adaptive Regularization**: λ_reg ∈ {1e-8, 1e-5, 1e-3} based on condition number
-- ✅ **SVD Fallback**: Tikhonov-regularized pseudoinverse for singular matrices
-- ✅ **Input Validation**: Comprehensive NaN/Inf detection and handling
-- ✅ **Overflow Protection**: Polynomial order limiting and value clipping
+The codebase documents mitigation strategies for numerical stability encountered during development. These mitigations have been exercised in the project's internal validation suites; independent reproduction and extended stress-testing are recommended before generalizing the results beyond the tested configurations.
+
+**Enhanced PCE and numerical safeguards (reported)**:
+- Adaptive regularization and SVD/Tikhonov fallbacks are implemented as practical mitigations in numerical workflows.
+- Input validation (NaN/Inf checks), overflow protection, and order limiting are used to reduce numerical failures in practice.
 
 **Robust Gaussian Process Surrogates**:
 - ✅ **Expanded Hyperparameter Bounds**: Length scale (1e-5, 1e5), noise (1e-12, 1e-1)
@@ -253,25 +253,17 @@ casimir-tunable-permittivity-stacks/
 
 ---
 
-## 🏆 Technical Achievements
+## Technical Achievements (reported / provisional)
 
-### **Digital Twin Framework**
-- **6 Integrated Mathematical Frameworks**: Complete multi-physics coupling
-- **Production-Grade Implementation**: Robust numerical algorithms with safety
-- **Real-Time Performance**: <10ms latency with >98% prediction accuracy
-- **Comprehensive Validation**: All critical and high severity issues resolved
+### Digital Twin Framework (reported capabilities)
+- Integrated multi-physics coupling and prototype integration demonstrated in test suites; performance and safety claims are contingent on model selection and test fixtures.
+- Numerical robustness measures are included; maintainers should provide reproducible validation artifacts for independent verification.
 
-### **Uncertainty Quantification Excellence**  
-- **Critical Numerical Stability**: All instability issues resolved
-- **Robust Statistical Methods**: PCE + GP + Sobol with comprehensive error handling
-- **Production Reliability**: Validated for industrial deployment
-- **Mathematical Rigor**: Advanced tensor formulations with proven convergence
+### Uncertainty Quantification (reported enhancements)
+- Implemented PCE + GP + Sobol workflows with added numerical safeguards; claims that "all instability issues resolved" should be qualified with the validation scope and datasets used.
 
-### **Control System Innovation**
-- **Multi-Rate Architecture**: Optimized for different timescale dynamics
-- **Hybrid H∞/MPC**: Robust performance with constraint satisfaction
-- **Adaptive Filtering**: EWMA with innovation-based parameter adjustment
-- **Multi-Sensor Fusion**: Weighted fusion with cross-correlation modeling
+### Control System (research-stage)
+- Multi-rate and hybrid control strategies are explored in modeling and prototype tests; production-readiness claims require formal V&V and long-duration stress tests.
 
 ---
 
@@ -281,4 +273,4 @@ This project is in the public domain under the Unlicense.
 
 ---
 
-*Revolutionary digital twin framework for tunable permittivity control through advanced multi-physics coupling, comprehensive uncertainty quantification, and production-grade mathematical foundations with quantum field theoretical enhancements.*
+*This repository documents research-stage work and prototype demonstrations for tunable permittivity stacks and related modeling. Descriptions of capabilities and numerical summaries are provisional and require reproducible artifacts, independent review, and engineering validation before being treated as deployment-ready or production-grade specifications.*
