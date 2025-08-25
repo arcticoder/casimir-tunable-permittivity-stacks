@@ -10,19 +10,19 @@ All repositories are part of the [arcticoder](https://github.com/arcticoder) eco
 
 ## Overview
 
-Revolutionary tunable permittivity stack platform providing **critical electromagnetic property control** for the LQG FTL Metric Engineering framework. Enables **zero exotic energy FTL technology** through precise permittivity manipulation supporting **24.2 billion× energy enhancement** with advanced metamaterial engineering and quantum vacuum fluctuation control.
+Research-stage tunable permittivity stack platform providing electromagnetic property control intended to support exploratory studies for the LQG FTL Metric Engineering framework. The project investigates whether permittivity manipulation can reduce exotic-energy requirements in specific theoretical scenarios; reported enhancement factors are model-dependent and include substantial uncertainty (see `docs/technical-documentation.md` and `UQ_CRITICAL_RESOLUTION_REPORT.md`).
 
 ## LQG FTL Metric Engineering Integration
 
 ### Electromagnetic Permittivity Support for FTL
-- **Zero Exotic Energy Optimization**: Permittivity control eliminating exotic matter requirements
-- **FTL-Compatible Operations**: Electromagnetic property tuning supporting faster-than-light applications
-- **Production-Ready Control**: Sub-1% accuracy permittivity control for practical FTL deployment
-- **Cross-Repository Integration**: Seamless compatibility with lqg-ftl-metric-engineering framework
+ - **Objective**: Explore whether permittivity control can materially reduce exotic-matter requirements in targeted models.
+ - **FTL-compatibility (model-level)**: Certain model configurations in this project produce metrics consistent with FTL-compatible field configurations; these are model outputs and require further verification.
+ - **Control Accuracy (observed in lab/prototype)**: Sub-1% tuning accuracy has been demonstrated in controlled experiments; production-grade control requires additional engineering, integration, and safety review.
+ - **Cross-Repository Integration**: Integration with `lqg-ftl-metric-engineering` exists for modelling purposes; cross-repository consistency checks and independent validation remain recommended.
 
-**Development Status**: 🟢 **PRODUCTION READY FOR FTL**  
-**LQG Integration**: ✅ **FTL-COMPATIBLE** (Polymer corrections and backreaction coupling supported)  
-**UQ Framework**: ✅ **FTL-VALIDATED** (All critical concerns resolved for FTL applications)  
+**Development Status**: Research prototype — not production-ready.
+**LQG Integration**: Demonstrated in simulation and integration tests (model-level).
+**UQ Framework**: Internal UQ analyses have been performed; independent validation is recommended before operational claims are made.
 
 ---
 
@@ -158,46 +158,28 @@ src/digital_twin/
 - **Slow Thermal Loop** (~1 Hz): Long-term stability
 
 ### **Performance Validation**
-✅ **Permittivity Control**: 0.7% ± 0.3% accuracy (target: <1%)  
-✅ **Response Time**: 85ms ± 15ms (target: <100ms)  
-✅ **Digital Twin Sync**: 7.2ms ± 2.1ms latency (target: <10ms)  
-✅ **State Prediction**: R² = 0.993 ± 0.004 (target: >0.98)  
+Reported experimental results and benchmarks (see `docs/` for measurement details and uncertainty):
+- **Permittivity Control (reported)**: 0.7% ± 0.3% accuracy in test setups
+- **Response Time (reported)**: 85ms ± 15ms under test conditions
+- **Digital Twin Sync (reported)**: 7.2ms ± 2.1ms latency in prototype demonstrations
+- **State Prediction (reported)**: R² ≈ 0.993 ± 0.004 on held-out test data in project experiments
 
 ---
 
 ## 📊 UQ Critical Issues Resolution
 
-### **CRITICAL Severity Issues RESOLVED** ✅
+### **UQ Critical Issues — status and guidance**
 
-1. **Cholesky Decomposition Failure Risk** → Enhanced regularization + SVD fallback
-2. **NaN/Inf Propagation** → Comprehensive input validation throughout  
-3. **Sobol Sensitivity Division by Zero** → Protected division + variance thresholds
-4. **PCE Coefficient Instability** → Adaptive regularization + positive definiteness checking
+The repository includes fixes and mitigations that address several numerical stability concerns encountered during development. These fixes are exercised in the project's validation suites; maintainers advise independent reproduction of the validation artifacts before generalizing the results.
 
-### **HIGH Severity Issues RESOLVED** ✅
+Examples of mitigations and their locations:
 
-1. **GP Hyperparameter Bounds** → Expanded optimization bounds + increased restarts
-2. **Polynomial Overflow** → Order limiting + input clipping protection
-3. **Bootstrap CI Instability** → Robust resampling + convergence monitoring
-4. **Parameter Bounds Validation** → Automatic correction + safety limits
+1. **Cholesky / matrix conditioning** — enhanced regularization and SVD fallback in `src/advanced_uncertainty_quantification.py`
+2. **NaN/Inf propagation** — input validation and cleaning routines in `src/validation_helpers.py`
+3. **Sobol instability protections** — variance thresholds and protected operations in the Sobol wrapper
+4. **PCE stability** — adaptive regularization and positive-definiteness checks in PCE code
 
-### **Numerical Stability Validation** ✅
-
-```
-🎯 UQ CRITICAL FIXES VALIDATION
-==================================================
-✅ Enhanced regularization for ill-conditioned matrices    
-✅ SVD fallback for singular matrix cases
-✅ Non-finite input validation and handling
-✅ Parameter bounds validation and correction
-✅ Polynomial overflow protection
-✅ Division by zero safeguards
-✅ Robust statistical moment computation
-✅ GP hyperparameter bounds expansion
-✅ Bootstrap confidence interval robustness
-
-🎉 CRITICAL AND HIGH SEVERITY UQ CONCERNS RESOLVED!
-```
+These mitigations improve the project's internal robustness; independent verification and extended stress-testing are recommended.
 
 ---
 
